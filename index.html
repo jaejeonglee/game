@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Telegram Game</title>
+    <script src="https://telegram.org/js/games.js"></script>
+    <style>
+      body {
+        background: url("/images/sky.png") no-repeat center center fixed;
+        background-size: cover;
+      }
+      .character {
+        width: 100px;
+        height: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>My Telegram Game</h1>
+    <img src="/images/star.png" alt="Character" class="character" />
+    <button onclick="TelegramGameProxy.shareScore()">Share score</button>
+    <script>
+      // 게임 로직 추가
+    </script>
+  </body>
+</html>
