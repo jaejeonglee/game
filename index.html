@@ -2,20 +2,44 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Making your first Phaser 3 Game - Part 10</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Phaser Game with Loading Screen</title>
     <script src="//cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
     <style type="text/css">
+      html,
       body {
         margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+      #gameContainer {
+        width: 100%;
+        height: 100%;
+        display: none; /* Initially hide the game container */
+      }
+      #loadingContainer {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 24px;
+        background-color: #000;
+        color: #fff;
       }
     </style>
   </head>
   <body>
+    <div id="loadingContainer">Loading...</div>
+    <div id="gameContainer"></div>
     <script type="text/javascript">
       var config = {
         type: Phaser.AUTO,
-        width: 800,
-        height: 600,
+        width: window.innerWidth,
+        height: window.innerHeight,
+        parent: "gameContainer",
         physics: {
           default: "arcade",
           arcade: {
@@ -38,44 +62,51 @@
       var score = 0;
       var gameOver = false;
       var scoreText;
+      var starNames = [];
 
       var game = new Phaser.Game(config);
 
       function preload() {
-        this.load.image("sky", "public/images/sky.png");
-        this.load.image("ground", "public/images/platform.png");
-        this.load.image("star", "public/images/star.png");
-        this.load.image("bomb", "public/images/bomb.png");
+        this.load.image("sky", "public/images/sky.png"); // 배경 이미지 로드
+        this.load.image("ground", "public/images/platform.png"); // 플랫폼 이미지 로드
+        this.load.image("star", "public/images/star.png"); // 별 이미지 로드
+        this.load.image("bomb", "public/images/bomb.png"); // 폭탄 이미지 로드
         this.load.spritesheet("dude", "public/images/dude.png", {
+          // 스프라이트시트 로드
           frameWidth: 32,
           frameHeight: 48,
+        });
+
+        // 로딩이 완료되면 호출될 콜백을 등록
+        this.load.on("complete", async () => {
+          // 서버에서 별 이름 데이터를 가져오는 함수 호출
+          await fetchStarNames();
+
+          // 로딩 화면 숨기기 및 게임 화면 보이기
+          document.getElementById("loadingContainer").style.display = "none"; // 로딩 화면 숨기기
+          document.getElementById("gameContainer").style.display = "block"; // 게임 화면 보이기
         });
       }
 
       function create() {
-        //  A simple background for our game
-        this.add.image(400, 300, "sky");
-
-        //  The platforms group contains the ground and the 2 ledges we can jump on
-        platforms = this.physics.add.staticGroup();
-
-        //  Here we create the ground.
-        //  Scale it to fit the width of the game (the original sprite is 400x32 in size)
-        platforms.create(400, 568, "ground").setScale(2).refreshBody();
-
-        //  Now let's create some ledges
-        platforms.create(600, 400, "ground");
+        // 게임 설정
+        this.add
+          .image(window.innerWidth / 2, window.innerHeight / 2, "sky")
+          .setDisplaySize(window.innerWidth, window.innerHeight); // 배경 이미지 추가 및 크기 조정
+        platforms = this.physics.add.staticGroup(); // 정적 플랫폼 그룹 생성
+        platforms
+          .create(window.innerWidth / 2, window.innerHeight - 32, "ground")
+          .setScale(2)
+          .refreshBody(); // 바닥 플랫폼 생성
+        platforms.create(600, 400, "ground"); // 추가 플랫폼 생성
         platforms.create(50, 250, "ground");
         platforms.create(750, 220, "ground");
 
-        // The player and its settings
-        player = this.physics.add.sprite(100, 450, "dude");
+        player = this.physics.add.sprite(100, 450, "dude"); // 플레이어 스프라이트 생성
+        player.setBounce(0.2); // 플레이어 바운스 설정
+        player.setCollideWorldBounds(true); // 플레이어가 월드 경계에 충돌하도록 설정
 
-        //  Player physics properties. Give the little guy a slight bounce.
-        player.setBounce(0.2);
-        player.setCollideWorldBounds(true);
-
-        //  Our player animations, turning, walking left and walking right.
+        // 플레이어 애니메이션 설정
         this.anims.create({
           key: "left",
           frames: this.anims.generateFrameNumbers("dude", { start: 0, end: 3 }),
@@ -96,56 +127,57 @@
           repeat: -1,
         });
 
-        //  Input Events
-        cursors = this.input.keyboard.createCursorKeys();
+        cursors = this.input.keyboard.createCursorKeys(); // 키보드 입력 생성
 
-        //  Some stars to collect, 12 in total, evenly spaced 70 pixels apart along the x axis
+        // 별 그룹 생성
         stars = this.physics.add.group({
           key: "star",
-          repeat: 11,
-          setXY: { x: 12, y: 0, stepX: 70 },
+          repeat: starNames.length - 1,
+          setXY: {
+            x: Phaser.Math.Between(0, window.innerWidth),
+            y: Phaser.Math.Between(0, window.innerHeight),
+            stepX: 0,
+          },
         });
 
+        // 각 별의 위치와 바운스 설정
         stars.children.iterate(function (child) {
-          //  Give each star a slightly different bounce
+          child.x = Phaser.Math.Between(0, window.innerWidth);
+          child.y = Phaser.Math.Between(0, window.innerHeight);
           child.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8));
         });
 
-        bombs = this.physics.add.group();
+        bombs = this.physics.add.group(); // 폭탄 그룹 생성
 
-        //  The score
+        // 점수 텍스트 생성
         scoreText = this.add.text(16, 16, "score: 0", {
           fontSize: "32px",
           fill: "#000",
         });
 
-        //  Collide the player and the stars with the platforms
+        // 충돌 설정
         this.physics.add.collider(player, platforms);
         this.physics.add.collider(stars, platforms);
         this.physics.add.collider(bombs, platforms);
-
-        //  Checks to see if the player overlaps with any of the stars, if he does call the collectStar function
-        this.physics.add.overlap(player, stars, collectStar, null, this);
-
-        this.physics.add.collider(player, bombs, hitBomb, null, this);
+        this.physics.add.overlap(player, stars, collectStar, null, this); // 플레이어와 별이 겹치면 collectStar 함수 호출
+        this.physics.add.collider(player, bombs, hitBomb, null, this); // 플레이어와 폭탄이 충돌하면 hitBomb 함수 호출
       }
 
       function update() {
         if (gameOver) {
+          // 게임 오버 상태 체크
           return;
         }
 
+        // 키보드 입력에 따라 플레이어 움직임 설정
         if (cursors.left.isDown) {
           player.setVelocityX(-160);
-
           player.anims.play("left", true);
         } else if (cursors.right.isDown) {
           player.setVelocityX(160);
-
           player.anims.play("right", true);
         } else {
           player.setVelocityX(0);
-
           player.anims.play("turn");
         }
 
@@ -155,23 +187,28 @@
       }
 
       function collectStar(player, star) {
-        star.disableBody(true, true);
-
-        //  Add and update the score
-        score += 10;
-        scoreText.setText("Score: " + score);
+        star.disableBody(true, true); // 별 비활성화
+        score += 10; // 점수 증가
+        scoreText.setText("Score: " + score); // 점수 텍스트 업데이트
 
         if (stars.countActive(true) === 0) {
-          //  A new batch of stars to collect
+          // 모든 별이 수집되었는지 확인
           stars.children.iterate(function (child) {
-            child.enableBody(true, child.x, 0, true, true);
+            // 새로운 별 생성
+            child.enableBody(
+              true,
+              Phaser.Math.Between(0, window.innerWidth),
+              0,
+              true,
+              true
+            );
           });
 
+          // 새로운 폭탄 생성
           var x =
-            player.x < 400
-              ? Phaser.Math.Between(400, 800)
-              : Phaser.Math.Between(0, 400);
-
+            player.x < window.innerWidth / 2
+              ? Phaser.Math.Between(window.innerWidth / 2, window.innerWidth)
+              : Phaser.Math.Between(0, window.innerWidth / 2);
           var bomb = bombs.create(x, 16, "bomb");
           bomb.setBounce(1);
           bomb.setCollideWorldBounds(true);
@@ -181,14 +218,34 @@
       }
 
       function hitBomb(player, bomb) {
-        this.physics.pause();
-
-        player.setTint(0xff0000);
-
-        player.anims.play("turn");
-
-        gameOver = true;
+        this.physics.pause(); // 물리 엔진 일시 중지
+        player.setTint(0xff0000); // 플레이어 색상 변경
+        player.anims.play("turn"); // 플레이어 애니메이션 변경
+        gameOver = true; // 게임 오버 상태 설정
+        showStarNames(); // 게임 오버 시 별 이름 표시
       }
+
+      function showStarNames() {
+        var starNamesText = starNames.join(", "); // 별 이름을 콤마로 연결
+        alert("Collected Star Names: " + starNamesText); // 별 이름을 알림으로 표시
+      }
+
+      async function fetchStarNames() {
+        // 서버 요청 시뮬레이션 (실제 서버 요청을 대체)
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            starNames = ["Star1", "Star2", "Star3", "Star4", "Star5"]; // 서버에서 받은 별 이름 데이터
+            resolve(); // 데이터 로드 완료
+          }, 2000); // 2초 지연 후 데이터 로드 완료
+        });
+      }
+
+      // 창 크기 변경 시 게임 크기 조정
+      window.addEventListener("resize", function () {
+        game.scale.resize(window.innerWidth, window.innerHeight);
+        // 게임 크기 조정
+        game.scale.resize(window.innerWidth, window.innerHeight);
+      });
     </script>
   </body>
 </html>
